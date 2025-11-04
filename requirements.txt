@@ -1,0 +1,15 @@
+langchain_core
+langchain_community
+langchain-classic
+python-dotenv
+streamlit
+langsmith
+langchain
+langserve
+fastapi
+uvicorn
+sse_starlette
+bs4
+pypdf
+chromadb
+ollama
