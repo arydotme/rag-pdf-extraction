@@ -3,13 +3,18 @@
 '''
 # Import library
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_ollama import OllamaEmbeddings
+from langchain_community.vectorstores import Chroma
+from langchain_classic.chains import create_retrieval_chain
+from langchain_classic.chains.combine_documents  import create_stuff_documents_chain
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_ollama import ChatOllama
 from dotenv import load_dotenv
-from langsmith import traceable
 import streamlit as st
 import os
+import tempfile
 
 load_dotenv()
 
@@ -24,27 +29,55 @@ st.title('PDF Extraction with llama')
 
 upload_file = st.file_uploader('Upload your PDF file', type=['pdf'])
 
+if upload_file is not None:
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+        tmp_file.write(upload_file.read())
+        tmp_path = tmp_file.name
+
+    st.success('File Uploaded!')
 
 # Response
 
-def get_response(query, chat_history):
-    template = """
-    Answer the following question based only on the provided context.
-    Think step by step before providing a detailed answer.
+def get_response(input, chat_history):
 
-    Chat history: {chat_history}
-    User question: {user_question}
-    """
-    prompt = ChatPromptTemplate.from_template(template)
+    if upload_file is not None:
 
-    llm = ChatOllama(model='llama3.2:1b')
+        loader = PyPDFLoader(tmp_path)
+        docs = loader.load()
 
-    chain = prompt | llm | StrOutputParser()
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=20)
+        documents = text_splitter.split_documents(docs)
 
-    return chain.invoke({
-        'chat_history': chat_history,
-        'user_question': query,
-    })
+        embeddings = OllamaEmbeddings(
+            model='nomic-embed-text:v1.5'
+        )
+
+        db = Chroma.from_documents(documents, embedding=embeddings)
+
+        llm = ChatOllama(model='llama3.2:latest')
+
+        template = """
+            Answer the following question based only on the provided context.
+            Think step by step before providing a detailed answer.
+
+            Chat history: {chat_history}
+            Context: {context}
+            User question: {input}
+            """
+        prompt = ChatPromptTemplate.from_template(template)
+
+        document_chain = create_stuff_documents_chain(llm, prompt)
+
+        retriever = db.as_retriever()
+
+        retriever_chain = create_retrieval_chain(retriever, document_chain)
+
+        response = retriever_chain.invoke({
+            'input': input,
+            'chat_history': chat_history,
+        })
+
+        return response
 
 # Conversation
 
@@ -68,6 +101,7 @@ if query is not None and query != '':
 
     with st.chat_message("AI"):
         response = get_response(query, st.session_state.chat_history)
-        st.markdown(response)
+        answer = response.get('answer')
+        st.markdown(answer)
 
-    st.session_state.chat_history.append(AIMessage(response))
+    st.session_state.chat_history.append(AIMessage(content=answer))
