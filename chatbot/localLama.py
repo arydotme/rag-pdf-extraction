@@ -1,6 +1,7 @@
-'''
+""" """
 
-'''
+import time
+
 # Import library
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.document_loaders import PyPDFLoader
@@ -8,7 +9,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_ollama import OllamaEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain_classic.chains import create_retrieval_chain
-from langchain_classic.chains.combine_documents  import create_stuff_documents_chain
+from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_ollama import ChatOllama
 from dotenv import load_dotenv
@@ -18,43 +19,42 @@ import tempfile
 
 load_dotenv()
 
-os.environ['LANGCHAIN_TRACING_V2'] = os.getenv('LANGCHAIN_TRACING_V2')
-os.environ['LANGCHAIN_API_KEY'] = os.getenv('LANGCHAIN_API_KEY')
-os.environ['LANGCHAIN_ENDPOINT'] = os.getenv('LANGCHAIN_ENDPOINT')
-os.environ['LANGCHAIN_PROJECT'] = os.getenv('LANGCHAIN_PROJECT')
+# os.environ['LANGCHAIN_TRACING_V2'] = os.getenv('LANGCHAIN_TRACING_V2')
+# os.environ['LANGCHAIN_API_KEY'] = os.getenv('LANGCHAIN_API_KEY')
+# os.environ['LANGCHAIN_ENDPOINT'] = os.getenv('LANGCHAIN_ENDPOINT')
+# os.environ['LANGCHAIN_PROJECT'] = os.getenv('LANGCHAIN_PROJECT')
 
-st.set_page_config(page_title='Local LLM', page_icon='🤖')
+st.set_page_config(page_title="Local LLM", page_icon="🤖")
 
-st.title('PDF Extraction with llama')
+st.title("PDF Extraction with llama")
 
-upload_file = st.file_uploader('Upload your PDF file', type=['pdf'])
+upload_file = st.file_uploader("Upload your PDF file", type=["pdf"])
 
 if upload_file is not None:
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
         tmp_file.write(upload_file.read())
         tmp_path = tmp_file.name
 
-    st.success('File Uploaded!')
+    st.success("File Uploaded!")
 
 # Response
 
+
 def get_response(input, chat_history):
-
     if upload_file is not None:
-
         loader = PyPDFLoader(tmp_path)
         docs = loader.load()
 
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=20)
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000, chunk_overlap=20
+        )
         documents = text_splitter.split_documents(docs)
 
-        embeddings = OllamaEmbeddings(
-            model='nomic-embed-text:v1.5'
-        )
+        embeddings = OllamaEmbeddings(model="nomic-embed-text:v1.5")
 
         db = Chroma.from_documents(documents, embedding=embeddings)
 
-        llm = ChatOllama(model='llama3.2:latest')
+        llm = ChatOllama(model="llama3.2:latest")
 
         template = """
             Answer the following question based only on the provided context.
@@ -72,12 +72,14 @@ def get_response(input, chat_history):
 
         retriever_chain = create_retrieval_chain(retriever, document_chain)
 
-        response = retriever_chain.invoke({
-            'input': input,
-            'chat_history': chat_history,
-        })
-
-        return response
+        for event in retriever_chain.stream(
+            {
+                "input": input,
+                "chat_history": chat_history,
+            }
+        ):
+            if "answer" in event:
+                yield event["answer"]
 
 # Conversation
 
@@ -92,8 +94,9 @@ for massage in st.session_state.chat_history:
         with st.chat_message("AI"):
             st.markdown(massage.content)
 
-query = st.chat_input('Ask about your PDF file')
-if query is not None and query != '':
+query = st.chat_input("Ask about your PDF file")
+
+if query is not None and query != "":
     st.session_state.chat_history.append(HumanMessage(query))
 
     with st.chat_message("Human"):
@@ -101,7 +104,6 @@ if query is not None and query != '':
 
     with st.chat_message("AI"):
         response = get_response(query, st.session_state.chat_history)
-        answer = response.get('answer')
-        st.markdown(answer)
+        result = st.write_stream(response)
 
-    st.session_state.chat_history.append(AIMessage(content=answer))
+    st.session_state.chat_history.append(AIMessage(content=result))
