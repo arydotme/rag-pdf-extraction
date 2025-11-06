@@ -1,21 +1,21 @@
 """ """
 
+import os
+import tempfile
 import time
+
+import streamlit as st
+from dotenv import load_dotenv
+from langchain_classic.chains import create_retrieval_chain
+from langchain_classic.chains.combine_documents import create_stuff_documents_chain
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.vectorstores import Chroma
+from langchain_core.messages import AIMessage, HumanMessage
 
 # Import library
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_community.document_loaders import PyPDFLoader
+from langchain_ollama import ChatOllama, OllamaEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_ollama import OllamaEmbeddings
-from langchain_community.vectorstores import Chroma
-from langchain_classic.chains import create_retrieval_chain
-from langchain_classic.chains.combine_documents import create_stuff_documents_chain
-from langchain_core.messages import HumanMessage, AIMessage
-from langchain_ollama import ChatOllama
-from dotenv import load_dotenv
-import streamlit as st
-import os
-import tempfile
 
 load_dotenv()
 
@@ -42,28 +42,33 @@ if upload_file is not None:
 
 def get_response(input, chat_history):
     if upload_file is not None:
-        loader = PyPDFLoader(tmp_path)
-        docs = loader.load()
 
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000, chunk_overlap=20
-        )
-        documents = text_splitter.split_documents(docs)
+        with st.spinner("Reading file"):
+            loader = PyPDFLoader(tmp_path)
+            docs = loader.load()
 
-        embeddings = OllamaEmbeddings(model="nomic-embed-text:v1.5")
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=1000, chunk_overlap=20
+            )
+            documents = text_splitter.split_documents(docs)
 
-        db = Chroma.from_documents(documents, embedding=embeddings)
+            embeddings = OllamaEmbeddings(model="nomic-embed-text:v1.5")
+
+            db = Chroma.from_documents(documents, embedding=embeddings)
+
+        thinking = st.empty()
+        thinking_spinner = thinking.spinner("Thinking")
 
         llm = ChatOllama(model="llama3.2:latest")
 
         template = """
-            Answer the following question based only on the provided context.
-            Think step by step before providing a detailed answer.
+                    Answer the following question based only on the provided context.
+                    Think step by step before providing a detailed answer.
 
-            Chat history: {chat_history}
-            Context: {context}
-            User question: {input}
-            """
+                    Chat history: {chat_history}
+                    Context: {context}
+                    User question: {input}
+                    """
         prompt = ChatPromptTemplate.from_template(template)
 
         document_chain = create_stuff_documents_chain(llm, prompt)
@@ -73,12 +78,13 @@ def get_response(input, chat_history):
         retriever_chain = create_retrieval_chain(retriever, document_chain)
 
         for event in retriever_chain.stream(
-            {
-                "input": input,
-                "chat_history": chat_history,
-            }
+                {
+                    "input": input,
+                    "chat_history": chat_history,
+                }
         ):
             if "answer" in event:
+                thinking_spinner.empty()
                 yield event["answer"]
 
 # Conversation
