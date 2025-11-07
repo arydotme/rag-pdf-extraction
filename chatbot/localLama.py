@@ -1,28 +1,26 @@
 """ """
 
-import os
-import tempfile
-import time
+# Import library
 
-import streamlit as st
-from dotenv import load_dotenv
 from langchain_classic.chains import create_retrieval_chain
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import Chroma
 from langchain_core.messages import AIMessage, HumanMessage
-
-# Import library
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from dotenv import load_dotenv
+import os
+import tempfile
+import streamlit as st
 
 load_dotenv()
 
-# os.environ['LANGCHAIN_TRACING_V2'] = os.getenv('LANGCHAIN_TRACING_V2')
-# os.environ['LANGCHAIN_API_KEY'] = os.getenv('LANGCHAIN_API_KEY')
-# os.environ['LANGCHAIN_ENDPOINT'] = os.getenv('LANGCHAIN_ENDPOINT')
-# os.environ['LANGCHAIN_PROJECT'] = os.getenv('LANGCHAIN_PROJECT')
+os.environ['LANGCHAIN_TRACING_V2'] = os.getenv('LANGCHAIN_TRACING_V2')
+os.environ['LANGCHAIN_API_KEY'] = os.getenv('LANGCHAIN_API_KEY')
+os.environ['LANGCHAIN_ENDPOINT'] = os.getenv('LANGCHAIN_ENDPOINT')
+os.environ['LANGCHAIN_PROJECT'] = os.getenv('LANGCHAIN_PROJECT')
 
 st.set_page_config(page_title="Local LLM", page_icon="🤖")
 
@@ -38,7 +36,6 @@ if upload_file is not None:
     st.success("File Uploaded!")
 
 # Response
-
 
 def get_response(input, chat_history):
     if upload_file is not None:
